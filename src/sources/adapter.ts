@@ -58,6 +58,10 @@ export interface SourceCard {
   externalSlug?: string;
   game: string;
   setName: string;
+  /** Set slug (JustTCG `set`), stable per set — use for sets.slug upsert. */
+  setSlug?: string;
+  /** Real set code like 'OP13'. JustTCG's /sets carries no code, so the sync
+   *  job derives this from the collector-number prefix; the adapter leaves it unset. */
   setCode?: string;
   name: string;
   collectorNumber?: string;
@@ -73,8 +77,8 @@ export interface PriceSource {
   /** True only on a plan whose terms permit a public surface. */
   readonly commercialOk: boolean;
 
-  listSets(game: string): Promise<Array<{ code?: string; name: string }>>;
-  fetchSet(game: string, setName: string): Promise<SourceCard[]>;
+  listSets(game: string): Promise<Array<{ slug: string; name: string; releasedOn?: string | null; code?: string }>>;
+  fetchSet(game: string, setSlug: string): Promise<SourceCard[]>;
   fetchByIds(uuids: string[]): Promise<SourceCard[]>;
 }
 
@@ -157,30 +161,51 @@ export class JustTCGSource implements PriceSource {
   }
 
   async listSets(game: string) {
-    const sets = await this.request<Array<{ id: string; name: string; code?: string }>>(
+    const sets = await this.request<Array<{ id: string; name: string; release_date?: string }>>(
       `/sets?game=${encodeURIComponent(game)}`,
     );
-    return sets.map((s) => ({ code: s.code, name: s.name }));
+    // Verified: /sets carries no set code — only a slug (`id`, e.g.
+    // 'romance-dawn-one-piece-card-game') and a display `name`. The real code
+    // (OP13, SV08) lives in the collector-number prefix and is derived during
+    // card sync, so `code` is left unset here.
+    return sets.map((s) => ({ slug: s.id, name: s.name, releasedOn: s.release_date ?? null }));
   }
 
-  async fetchSet(game: string, setName: string): Promise<SourceCard[]> {
-    const cards: JtCard[] = [];
+  /** One page of /cards. Returns the data plus the envelope's `meta.hasMore`. */
+  private getCardsPage(path: string): Promise<{ cards: JtCard[]; hasMore: boolean }> {
+    return this.limiter.run(async () => {
+      const res = await fetch(`${this.baseUrl}${path}`, {
+        headers: { 'x-api-key': this.opts.apiKey, 'content-type': 'application/json' },
+      });
+      if (res.status === 429) throw new SourceError(this.key, 429, 'rate limited');
+      if (!res.ok) throw new SourceError(this.key, res.status, await res.text().catch(() => ''));
+      const body = (await res.json()) as { data?: JtCard[]; meta?: { hasMore?: boolean } };
+      return { cards: body.data ?? [], hasMore: !!body.meta?.hasMore };
+    });
+  }
+
+  async fetchSet(game: string, setSlug: string): Promise<SourceCard[]> {
+    // The server-side `set` filter param could NOT be confirmed on the free tier
+    // (intermittent 400s under rate limiting). Rather than build on that guess,
+    // page the confirmed game-wide listing and keep only cards whose `set` slug
+    // matches — correct regardless of whether the server honors a `set` filter.
+    // Swap to `&set=${setSlug}` once scripts/verify.js confirms it on a paid key;
+    // that turns this from an O(game) scan into an O(set) fetch.
+    const out: SourceCard[] = [];
     let offset = 0;
     const limit = 100;
 
-    // Paginate to exhaustion. A large Pokemon set runs several pages.
     for (;;) {
-      const page = await this.request<JtCard[]>(
+      const { cards, hasMore } = await this.getCardsPage(
         `/cards?game=${encodeURIComponent(game)}` +
-          `&set=${encodeURIComponent(setName)}` +
           `&limit=${limit}&offset=${offset}` +
           `&priceHistoryDuration=${this.historyDays}d`,
       );
-      cards.push(...page);
-      if (page.length < limit) break;
+      for (const c of cards) if (c.set === setSlug) out.push(this.toSourceCard(c));
+      if (!hasMore || cards.length === 0) break;
       offset += limit;
     }
-    return cards.map((c) => this.toSourceCard(c));
+    return out;
   }
 
   /**
@@ -216,9 +241,13 @@ export class JustTCGSource implements PriceSource {
       externalUuid: c.uuid,
       externalSlug: c.id,
       game: c.game,
-      setName: c.set,
+      // Verified shape: `set` is a slug ('romance-dawn-one-piece-card-game'),
+      // `set_name` is the display name ('Romance Dawn'). The old code used
+      // `c.set` as the display name — that was the slug.
+      setSlug: c.set,
+      setName: c.set_name,
       name: c.name,
-      collectorNumber: c.number,
+      collectorNumber: c.number,   // 'OP13-118' for singles, 'N/A' for sealed
       rarity: c.rarity,
       quotes: (c.variants ?? []).map((v) => ({
         externalUuid: v.uuid,
@@ -242,7 +271,9 @@ export class JustTCGSource implements PriceSource {
         cov7d: v.covPrice7d ?? null,
         trendSlope30d: v.trendSlope30d ?? null,
         priceChanges30d: v.priceChangesCount30d ?? null,
-        history: (v.priceHistory30d ?? v.priceHistory ?? [])
+        // Verified point shape: { p: cents, t: unixSeconds }. Field is
+        // `priceHistory` (populated when priceHistoryDuration is requested).
+        history: (v.priceHistory ?? [])
           .map((pt) => ({
             observedOn: new Date(pt.t * 1000).toISOString().slice(0, 10),
             priceCents: toCents(pt.p),
@@ -256,47 +287,56 @@ export class JustTCGSource implements PriceSource {
 
 /* ------------------------------------------------------------------ */
 
-interface JtPricePoint { p: number; t: number }
+interface JtPricePoint { p: number; t: number }  // p = cents, t = unix seconds
 
+// Verified variant shape (subset of the ~45 fields JustTCG returns per variant).
 interface JtVariant {
   uuid: string;
   id: string;
   condition?: string;
   printing?: string;
-  language?: string;
-  grader?: Grader;
+  language?: string;            // present and populated (e.g. 'English')
+  grader?: Grader;              // JustTCG v2 exposes graded copies as variants
   grade?: number;
   tcgplayerSkuId?: string;
-  price: number;                 // USD, float
-  lastUpdated: number;
-  avgPrice?: number | null;
-  minPrice30d?: number | null;
-  maxPrice30d?: number | null;
+  price: number;                // ALREADY IN CENTS (float; may be fractional)
+  lastUpdated: number;          // unix seconds
+  avgPrice?: number | null;     // cents
+  minPrice30d?: number | null;  // cents
+  maxPrice30d?: number | null;  // cents
   covPrice7d?: number | null;
   trendSlope30d?: number | null;
   priceChangesCount30d?: number | null;
   priceHistory?: JtPricePoint[] | null;
-  priceHistory30d?: JtPricePoint[] | null;
 }
 
+// Verified card shape: `set` is a slug, `set_name` is the display name,
+// `number` is the collector number ('OP13-118') or 'N/A' for sealed.
 interface JtCard {
   uuid: string;
   id: string;
   game: string;
   set: string;
+  set_name?: string;
   name: string;
   number?: string;
   rarity?: string;
+  tcgplayerId?: string | number;
+  details?: unknown;
   variants?: JtVariant[];
 }
 
 /**
- * USD float -> integer cents. `4.99 * 100` is 498.99999999999994 in
- * IEEE754, so the rounding is not optional.
+ * JustTCG prices are ALREADY IN CENTS — verified against the live API with
+ * scripts/verify.js (e.g. price 377.29 = $3.77, 49499 = $494.99, and a
+ * priceHistory point p:13000 = $130.00). The published docs called `price`
+ * a "USD float"; that is wrong, and multiplying by 100 made every number
+ * 100x too high. Values can be fractional cents, so round to a whole cent.
+ * Do NOT multiply by 100.
  */
-const toCents = (usd: number): number => Math.round(usd * 100);
-const toCentsOrNull = (usd: number | null | undefined): number | null =>
-  usd == null ? null : toCents(usd);
+const toCents = (cents: number): number => Math.round(cents);
+const toCentsOrNull = (cents: number | null | undefined): number | null =>
+  cents == null ? null : toCents(cents);
 
 const today = () => new Date().toISOString().slice(0, 10);
 

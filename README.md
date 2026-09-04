@@ -45,15 +45,24 @@ PORT=3000
 
 **Not available — do not attempt:** TCGplayer API (closed to new devs), eBay sold comps (Marketplace Insights is partner-gated), BGS/CGC cert APIs (website lookup only).
 
-## Before you build the sync job
+## Verified state (from `scripts/verify.js` against the live API)
 
-The `/cards` query-parameter names and pagination shape in `src/sources/adapter.ts` are **inferred from the docs, not tested**. Verify them against the live API first, then correct the adapter from the output:
+Run it yourself any time — read-only, dependency-free:
 
 ```bash
 JUSTTCG_API_KEY=tcg_xxx node scripts/verify.js
 ```
 
-`verify.js` is read-only and dependency-free. Do not build the sync job on top of the guesses.
+What the live API actually does (the adapter is corrected to match — the docs were wrong in two places):
+
+- ✅ Auth (`x-api-key`) and all four game slugs — `pokemon`, `pokemon-japan`, `magic-the-gathering`, `one-piece-card-game` — are correct.
+- ⚠️ **Money: `price` is already in CENTS**, as a possibly-fractional float (`377.29` = $3.77, `49499` = $494.99). The docs called it a "USD float"; multiplying by 100 made every number 100× too high. The adapter now does `Math.round(price)` — **not** `× 100`. `priceHistory` points are `{ p: cents, t: unixSeconds }`.
+- ⚠️ **Sets carry no `code`** — only a slug (`id`) and `name`. The real set code (`OP13`) lives in the collector-number prefix; derive it during card sync.
+- ⚠️ **Card shape**: `set` is a slug, `set_name` is the display name, `number` is the collector number (`OP13-118`) or `N/A` for sealed. Envelope is `{ data, meta: { total, limit, offset, hasMore } }`.
+- ❓ **Unconfirmed — the server-side `set` filter on `/cards`.** It returned intermittent `400`s under the free tier's rate limit, so it could not be pinned down. `fetchSet` therefore filters client-side over the confirmed game-wide listing; switch it to a server `set=<slug>` filter once you can confirm it on a paid key.
+- 📉 **Free tier limits: 100 requests/day, 10/sec** (reported in the response `_metadata`). A full catalog sync of the larger games is a Pro/Business-tier operation.
+
+A recorded response lives at `__fixtures__/justtcg-cards-one-piece.json` and drives `src/sources/adapter.test.ts`. It is used only in tests, never imported by application code.
 
 ## Getting started
 

@@ -6,7 +6,7 @@
  * $0.00 (Rule Zero: name what's missing, don't fake it).
  */
 
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api, fmtCents, fmtPct, GAMES, type SearchHit, type VariantRow, type ProductInfo } from '../lib/api';
 
 interface VariantsPanel {
@@ -45,15 +45,13 @@ export default function Search() {
   const [added, setAdded] = useState<Record<string, boolean>>({});
   const [addingId, setAddingId] = useState<string | null>(null);
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    const term = q.trim();
-    if (!term) return;
+  async function runSearch(term: string) {
     setLoading(true);
     setError(null);
     setOpenProductId(null);
     setPanel(null);
     try {
+      // An empty term browses the catalog (top priced items) instead of a blank page.
       const results = await api.search(term, game || undefined);
       setHits(results);
       setSearchedTerm(term);
@@ -63,6 +61,20 @@ export default function Search() {
       setLoading(false);
     }
   }
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    void runSearch(q.trim());
+  }
+
+  // Search as you type (debounced), and browse the catalog on first open and
+  // whenever the game filter changes. The Search button still fires immediately.
+  useEffect(() => {
+    const term = q.trim();
+    const id = setTimeout(() => { void runSearch(term); }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, game]);
 
   async function toggleVariants(productId: string) {
     if (openProductId === productId) {
@@ -126,15 +138,16 @@ export default function Search() {
 
       {hits == null && !error && (
         <div className="empty">
-          <strong>Search your catalog</strong>
-          Find a card by name, collector number (e.g. OP09-093), or set code.
+          <strong>Loading catalog…</strong>
+          Find a card by name, collector number (e.g. OP05-119), or set code (e.g. OP05).
         </div>
       )}
 
       {hits != null && hits.length === 0 && (
         <div className="empty">
           <strong>No matches for "{searchedTerm}"</strong>
-          If the catalog hasn't been synced yet, results will be empty until JUSTTCG_API_KEY is set and the catalog sync has run.
+          Try a set code like OP05, a collector number like OP05-119, or part of a card name.
+          The catalog currently holds One Piece cards.
         </div>
       )}
 

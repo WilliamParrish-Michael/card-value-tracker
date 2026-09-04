@@ -17,7 +17,9 @@ export function searchRouter(): Router {
   r.get('/', async (req, res) => {
     const q = String(req.query.q ?? '').trim();
     const game = req.query.game ? String(req.query.game) : null;
-    if (!q) return res.json({ data: [], query: q });
+    // An empty query browses the catalog (most valuable priced items first)
+    // rather than showing a dead-end blank page.
+    const browse = q === '';
 
     try {
       const rows = await sequelize.query(
@@ -29,7 +31,7 @@ export function searchRouter(): Router {
                 p.rarity,
                 p.kind,
                 p.image_url,
-                dv.market_cents,        -- base NM/Normal market, or NULL
+                dv.market_cents,        -- representative variant market, or NULL
                 dv.confidence
            FROM products p
            JOIN sets s        ON s.id = p.set_id
@@ -51,15 +53,24 @@ export function searchRouter(): Router {
            ) dv ON true
           WHERE ($game::text IS NULL OR c.slug = $game)
             AND (
-              p.collector_number ILIKE '%' || $q || '%'
+              $browse
+              -- Name match is substring (ILIKE) as well as full-text, so partial
+              -- names like "luffy" hit "Monkey.D.Luffy" — plainto_tsquery alone
+              -- won't split a dotted token.
+              OR p.name ILIKE '%' || $q || '%'
+              OR p.collector_number ILIKE '%' || $q || '%'
               OR s.set_code ILIKE '%' || $q || '%'
               OR to_tsvector('english', p.name) @@ plainto_tsquery('english', $q)
             )
-          ORDER BY (p.collector_number ILIKE $q) DESC, p.name
+          ORDER BY
+            (NOT $browse AND p.collector_number ILIKE $q) DESC,  -- exact number first when searching
+            ($browse AND dv.market_cents IS NOT NULL) DESC,      -- priced items first when browsing
+            (CASE WHEN $browse THEN dv.market_cents END) DESC NULLS LAST,
+            p.name
           LIMIT 50`,
-        { bind: { q, game }, type: QueryTypes.SELECT },
+        { bind: { q, game, browse }, type: QueryTypes.SELECT },
       );
-      res.json({ data: rows, query: q });
+      res.json({ data: rows, query: q, browse });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message, data: [] });
     }

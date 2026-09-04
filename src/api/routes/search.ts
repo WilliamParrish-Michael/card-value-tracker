@@ -64,6 +64,10 @@ export function searchRouter(): Router {
               OR p.name ILIKE '%' || $q || '%'
               OR p.collector_number ILIKE '%' || $q || '%'
               OR s.set_code ILIKE '%' || $q || '%'
+              -- Match the SET name/slug too, so typing a set ("prismatic evolution")
+              -- returns that set's cards (whose own names don't contain the set name).
+              OR s.name ILIKE '%' || $q || '%'
+              OR s.slug ILIKE '%' || $q || '%'
               OR to_tsvector('english', p.name) @@ plainto_tsquery('english', $q)
             )
           ORDER BY

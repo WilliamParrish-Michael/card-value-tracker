@@ -1,0 +1,27 @@
+# Secrets — never commit a real key. This line ships in the FIRST commit,
+# before any key exists.
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+web/node_modules/
+
+# Build output
+dist/
+web/dist/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Test / coverage
+coverage/

@@ -1,0 +1,37 @@
+{
+  "name": "card-value-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Price and trade-value tracker for Pokemon (EN+JP), Magic, and One Piece singles and sealed.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "verify": "node scripts/verify.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx watch src/api/server.ts",
+    "start": "node dist/api/server.js",
+    "worker": "tsx src/jobs/sync-prices.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:schema": "psql \"$DATABASE_URL\" -f db/schema.sql"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "pg": "^8.12.0",
+    "sequelize": "^6.37.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "sequelize-cli": "^6.6.2",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.5"
+  }
+}

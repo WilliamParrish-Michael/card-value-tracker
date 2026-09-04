@@ -1,0 +1,92 @@
+# Card Value Tracker
+
+Price and trade-value tracking for **Pokémon (English + Japanese)**, **Magic: The Gathering**, and the **One Piece Card Game** — singles and sealed, with graded slabs as a secondary path.
+
+Built for a working collector who prices cards daily. The guiding rule is below.
+
+## Rule zero: no invented data
+
+The database is never seeded with placeholder prices, sample cards, or generated history. If a source is unreachable or a key is missing, the UI shows an **empty state that names what is missing**. An empty screen is correct; a plausible wrong number is not — the first user will trust a number that looks right.
+
+Fixtures live in `__fixtures__/`, are captured from real API responses, are used **only in tests**, and are never imported by application code.
+
+Things that fail *loudly* rather than degrade into a plausible number:
+
+- A variant with no observation in 48 hours reads as **stale**, never as its last price presented as current.
+- A single-source valuation is **labeled** as such.
+- A cert PSA doesn't recognize **says so**; it never falls through to a name-based guess.
+- A card matched below the confidence threshold is **never priced automatically**.
+
+## Stack
+
+- **Backend** — Node 20+, TypeScript, Express, PostgreSQL **15+** (the schema uses `NULLS NOT DISTINCT`, which does not exist before 15), Sequelize
+- **Frontend** — React + TypeScript, Vite
+- **Jobs** — a plain worker with `node-cron`; no queue service yet
+- **Testing** — Vitest, one integration test per adapter against recorded fixtures
+
+## Secrets
+
+Never commit an API key. `.env.example` ships with empty values; `.env` is gitignored from the first commit. **All external calls go through the Express layer — the browser never sees a key** (both JustTCG and PSA require this).
+
+```
+DATABASE_URL=postgres://localhost:5432/cardtracker
+JUSTTCG_API_KEY=
+PSA_USERNAME=
+PSA_PASSWORD=
+PORT=3000
+```
+
+## Data sources
+
+| Source | Role | Notes |
+| --- | --- | --- |
+| **JustTCG** | prices + catalog | `https://api.justtcg.com/v1`, `x-api-key` header. All 4 game slugs; batch `POST /cards` max 200. Every variant carries a stable `uuid` (primary key) and a `tcgplayerSkuId` (crosswalk). Prices are USD floats → integer cents at the adapter boundary. Commercial use gated on `sources.commercial_ok`. |
+| **PSA** | cert lookup only | `https://www.psacard.com/publicapi`, OAuth2 password grant. Cert number in → description + grade out. **No** population, price-guide, or submission endpoints exist. Cert images only for Oct 2021 onward. |
+
+**Not available — do not attempt:** TCGplayer API (closed to new devs), eBay sold comps (Marketplace Insights is partner-gated), BGS/CGC cert APIs (website lookup only).
+
+## Before you build the sync job
+
+The `/cards` query-parameter names and pagination shape in `src/sources/adapter.ts` are **inferred from the docs, not tested**. Verify them against the live API first, then correct the adapter from the output:
+
+```bash
+JUSTTCG_API_KEY=tcg_xxx node scripts/verify.js
+```
+
+`verify.js` is read-only and dependency-free. Do not build the sync job on top of the guesses.
+
+## Getting started
+
+```bash
+cp .env.example .env          # fill in JUSTTCG_API_KEY, PSA creds, DATABASE_URL
+npm install
+createdb cardtracker          # PostgreSQL 15+
+npm run db:schema             # apply db/schema.sql
+npm run verify                # confirm the JustTCG adapter assumptions
+```
+
+## Layout
+
+```
+db/          schema.sql, migrations (generated from it), seeds (catalog only — never prices)
+scripts/     verify.js — pre-flight check of the JustTCG adapter
+src/
+  sources/   adapter.ts (PriceSource + JustTCG), psa.ts (cert only), registry.ts
+  valuation/ index.ts (blend, trade bands, metrics), compute.ts (nightly writer)
+  jobs/      sync-catalog, sync-prices, backfill-history
+  api/       Express routes + server
+  models/    Sequelize models
+web/         React + Vite front end (Search, Collection, Scan, Settings)
+__fixtures__ recorded API responses, tests only
+```
+
+## Milestones
+
+1. **Schema + catalog sync** — done when a full sync of all four games re-runs with zero new rows and zero duplicates.
+2. **Prices + valuation** — one `price_observations` row per variant/source/day; `daily_valuations` traceable back to the observations that produced it.
+3. **Search + collection** — full-text + exact `collector_number`/`set_code` (searching `OP09-093` returns a hit); collection with market / cash / credit / movement and CSV export; versioned trade bands.
+4. **Camera + barcode scan** — a slab barcode carries only the cert number; the chain is decode → PSA lookup → match our product (picker when confidence is low) → variant → value. BGS/CGC are manual-entry only. Sealed UPCs route to a separate `products.kind = 'sealed'` path.
+
+## Money
+
+Integer cents everywhere. JustTCG returns USD floats; `Math.round(usd * 100)` at the adapter boundary, and no float passes it.

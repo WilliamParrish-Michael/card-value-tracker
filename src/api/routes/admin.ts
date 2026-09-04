@@ -71,10 +71,14 @@ export function adminRouter(): Router {
       return res.status(400).json({ error: 'No price source configured.', missing: 'JUSTTCG_API_KEY' });
     }
     const priceLimit = Math.min(Math.max(Number(req.query.priceLimit ?? 500), 1), 2000);
+    // refetch=false recomputes valuations from observations already in the DB
+    // without hitting the source at all — useful when prices are loaded but the
+    // valuation pass didn't finish (and to avoid burning the daily API quota).
+    const refetch = String(req.query.refetch ?? 'true') !== 'false';
     try {
-      const prices = await syncPrices({ limit: priceLimit });
+      const prices = refetch ? await syncPrices({ limit: priceLimit }) : { observations: 0, variants: 0, skipped: true };
       const valuation = await computeValuations();
-      return res.json({ ok: true, prices, valuation });
+      return res.json({ ok: true, refetch, prices, valuation });
     } catch (err) {
       return res.status(502).json({ error: 'refresh failed', detail: (err as Error).message });
     }

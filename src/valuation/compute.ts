@@ -51,13 +51,16 @@ export async function computeValuations(valuedOn?: string): Promise<{ valued: nu
   const variantIds = [...new Set(todays.map((r) => r.variant_id))];
 
   // 90-day series (any source) for change + range, for just those variants.
+  // One mechanism only — Sequelize forbids mixing `replacements` and `bind` in a
+  // single query. Use replacements for both, and CAST(:on ...) so the parser
+  // doesn't trip over `:on::date`.
   const hist = await sequelize.query<HistRow>(
     `SELECT variant_id, observed_on::text AS observed_on, price_cents
        FROM price_observations
       WHERE variant_id IN (:ids)
-        AND observed_on >= ($on::date - INTERVAL '90 days')
+        AND observed_on >= (CAST(:on AS date) - INTERVAL '90 days')
       ORDER BY variant_id, observed_on`,
-    { replacements: { ids: variantIds }, bind: { on }, type: QueryTypes.SELECT },
+    { replacements: { ids: variantIds, on }, type: QueryTypes.SELECT },
   );
 
   const byVariantToday = new Map<string, ObsRow[]>();

@@ -148,11 +148,11 @@ export class JustTCGSource implements PriceSource {
    * serializes with other requests rather than racing them.
    */
   private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
-    const maxAttempts = 4;
+    const maxAttempts = 6;
     for (let attempt = 1; ; attempt++) {
       const res = await fetch(url, init);
       if (res.status !== 429 || attempt >= maxAttempts) return res;
-      await sleep(1500 * attempt); // 1.5s, 3s, 4.5s
+      await sleep(2000 * attempt); // 2s, 4s, 6s, 8s, 10s
     }
   }
 

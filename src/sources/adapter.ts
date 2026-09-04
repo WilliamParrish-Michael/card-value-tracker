@@ -171,6 +171,26 @@ export class JustTCGSource implements PriceSource {
     return sets.map((s) => ({ slug: s.id, name: s.name, releasedOn: s.release_date ?? null }));
   }
 
+  /**
+   * Stream every card in a game, one page at a time. The catalog sync pages a
+   * game once and groups by set slug — far cheaper than a per-set fetch while
+   * the server `set` filter is unconfirmed.
+   */
+  async *pages(game: string): AsyncGenerator<SourceCard[]> {
+    let offset = 0;
+    const limit = 100;
+    for (;;) {
+      const { cards, hasMore } = await this.getCardsPage(
+        `/cards?game=${encodeURIComponent(game)}` +
+          `&limit=${limit}&offset=${offset}` +
+          `&priceHistoryDuration=${this.historyDays}d`,
+      );
+      yield cards.map((c) => this.toSourceCard(c));
+      if (!hasMore || cards.length === 0) break;
+      offset += limit;
+    }
+  }
+
   /** One page of /cards. Returns the data plus the envelope's `meta.hasMore`. */
   private getCardsPage(path: string): Promise<{ cards: JtCard[]; hasMore: boolean }> {
     return this.limiter.run(async () => {

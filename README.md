@@ -41,7 +41,7 @@ PORT=3000
 | Source | Role | Notes |
 | --- | --- | --- |
 | **JustTCG** | prices + catalog | `https://api.justtcg.com/v1`, `x-api-key` header. All 4 game slugs; batch `POST /cards` max 200. Every variant carries a stable `uuid` (primary key) and a `tcgplayerSkuId` (crosswalk). Prices are USD floats → integer cents at the adapter boundary. Commercial use gated on `sources.commercial_ok`. |
-| **PSA** | cert lookup only | `https://www.psacard.com/publicapi`, OAuth2 password grant. Cert number in → description + grade out. **No** population, price-guide, or submission endpoints exist. Cert images only for Oct 2021 onward. |
+| **PSA** | cert lookup only | `https://api.psacard.com/publicapi`, **pre-issued bearer token** you generate on the PSA site (`authorization: bearer <token>`) — set `PSA_ACCESS_TOKEN`. Cert number in → description + grade out. A 200 carries `{ IsValidRequest, ServerMessage }`; `403` means the account isn't approved for API access yet. **No** population, price-guide, or submission endpoints exist. Cert images only for Oct 2021 onward. |
 
 **Not available — do not attempt:** TCGplayer API (closed to new devs), eBay sold comps (Marketplace Insights is partner-gated), BGS/CGC cert APIs (website lookup only).
 
@@ -67,12 +67,42 @@ A recorded response lives at `__fixtures__/justtcg-cards-one-piece.json` and dri
 ## Getting started
 
 ```bash
-cp .env.example .env          # fill in JUSTTCG_API_KEY, PSA creds, DATABASE_URL
-npm install
+cp .env.example .env          # DATABASE_URL, JUSTTCG_API_KEY, PSA_ACCESS_TOKEN
 createdb cardtracker          # PostgreSQL 15+
-npm run db:schema             # apply db/schema.sql
-npm run verify                # confirm the JustTCG adapter assumptions
+
+# backend
+npm install
+npx sequelize-cli db:migrate  # applies db/schema.sql + the holdings table
+npm run verify                # confirm the JustTCG adapter assumptions (read-only)
+
+# load data (needs JUSTTCG_API_KEY; free tier is 100 req/day)
+npx tsx src/jobs/sync-catalog.ts     # games -> sets -> cards -> variants
+npx tsx src/jobs/sync-prices.ts      # today's prices -> price_observations
+npx tsx src/jobs/backfill-history.ts # source history -> price_observations (is_backfill)
+npx tsx src/valuation/compute.ts     # -> daily_valuations
 ```
+
+## Running it
+
+Two processes. The browser only talks to the API (keys stay server-side); Vite
+proxies `/api` to the Express server in dev.
+
+```bash
+# terminal 1 — API (http://localhost:3000)
+npm run dev
+
+# terminal 2 — web app (http://localhost:5173)
+cd web && npm install && npm run dev
+```
+
+Open http://localhost:5173. With no data yet, every screen shows an empty state
+that names what's missing (set the key, run the sync) — never a fake number.
+`npm run worker` runs the scheduled jobs (prices, valuations, backfill, catalog).
+
+**Implemented:** M1 schema + catalog sync · M2 prices, history backfill, valuation
+blend · M3 search, collection (+ CSV, versioned trade bands) · M4 cert/UPC scan
+(camera + manual, PSA cert chain, low-confidence picker). PSA cert lookup needs
+your account approved for API access (see below).
 
 ## Layout
 

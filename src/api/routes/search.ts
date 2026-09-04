@@ -35,13 +35,18 @@ export function searchRouter(): Router {
            JOIN sets s        ON s.id = p.set_id
            JOIN categories c  ON c.id = p.category_id
            LEFT JOIN LATERAL (
+             -- Representative value for the list row: prefer the Near Mint /
+             -- Normal variant, but fall back to the best available printing
+             -- (many One Piece / MTG singles are Foil-only, so a hard Normal
+             -- filter would blank their price in the list). Only variants that
+             -- actually have a valuation are considered.
              SELECT dv.market_cents, dv.confidence
                FROM variants v
                JOIN daily_valuations dv ON dv.variant_id = v.id
               WHERE v.product_id = p.id
-                AND coalesce(v.condition, 'Near Mint') = 'Near Mint'
-                AND coalesce(v.printing, 'Normal') = 'Normal'
-              ORDER BY dv.valued_on DESC
+              ORDER BY (coalesce(v.condition, 'Near Mint') = 'Near Mint') DESC,
+                       (coalesce(v.printing, 'Normal') = 'Normal') DESC,
+                       dv.valued_on DESC
               LIMIT 1
            ) dv ON true
           WHERE ($game::text IS NULL OR c.slug = $game)

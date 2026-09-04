@@ -62,5 +62,23 @@ export function adminRouter(): Router {
     }
   });
 
+  // Re-runnable price + valuation refresh for the already-loaded catalog. Unlike
+  // bootstrap this is idempotent and safe to call repeatedly: it only refreshes
+  // existing variants (price_observations upserts ON CONFLICT DO NOTHING per day)
+  // and recomputes daily_valuations. `limit` bounds a run to stay inside quota.
+  router.post('/refresh', async (req, res) => {
+    if (!hasAnySource()) {
+      return res.status(400).json({ error: 'No price source configured.', missing: 'JUSTTCG_API_KEY' });
+    }
+    const priceLimit = Math.min(Math.max(Number(req.query.priceLimit ?? 500), 1), 2000);
+    try {
+      const prices = await syncPrices({ limit: priceLimit });
+      const valuation = await computeValuations();
+      return res.json({ ok: true, prices, valuation });
+    } catch (err) {
+      return res.status(502).json({ error: 'refresh failed', detail: (err as Error).message });
+    }
+  });
+
   return router;
 }

@@ -140,9 +140,24 @@ export class JustTCGSource implements PriceSource {
     this.historyDays = opts.priceHistoryDays ?? 30;
   }
 
+  /**
+   * fetch that retries a 429 with linear backoff (per-second limits are
+   * transient). A 429 that survives every attempt is a real quota wall and is
+   * left for the caller to surface. Runs inside the limiter slot, so the backoff
+   * serializes with other requests rather than racing them.
+   */
+  private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+    const maxAttempts = 4;
+    for (let attempt = 1; ; attempt++) {
+      const res = await fetch(url, init);
+      if (res.status !== 429 || attempt >= maxAttempts) return res;
+      await sleep(1500 * attempt); // 1.5s, 3s, 4.5s
+    }
+  }
+
   private request<T>(path: string, init?: RequestInit): Promise<T> {
     return this.limiter.run(async () => {
-      const res = await fetch(`${this.baseUrl}${path}`, {
+      const res = await this.fetchWithRetry(`${this.baseUrl}${path}`, {
         ...init,
         headers: {
           'x-api-key': this.opts.apiKey,
@@ -203,7 +218,7 @@ export class JustTCGSource implements PriceSource {
   /** One page of /cards. Returns the data plus the envelope's `meta.hasMore`. */
   private getCardsPage(path: string): Promise<{ cards: JtCard[]; hasMore: boolean }> {
     return this.limiter.run(async () => {
-      const res = await fetch(`${this.baseUrl}${path}`, {
+      const res = await this.fetchWithRetry(`${this.baseUrl}${path}`, {
         headers: { 'x-api-key': this.opts.apiKey, 'content-type': 'application/json' },
       });
       if (res.status === 429) throw new SourceError(this.key, 429, 'rate limited');

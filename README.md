@@ -126,6 +126,35 @@ __fixtures__ recorded API responses, tests only
 3. **Search + collection** — full-text + exact `collector_number`/`set_code` (searching `OP09-093` returns a hit); collection with market / cash / credit / movement and CSV export; versioned trade bands.
 4. **Camera + barcode scan** — a slab barcode carries only the cert number; the chain is decode → PSA lookup → match our product (picker when confidence is low) → variant → value. BGS/CGC are manual-entry only. Sealed UPCs route to a separate `products.kind = 'sealed'` path.
 
+## Addendum: sealed product, sourcing friction, trade balancer
+
+Additive layer (Pokémon + One Piece sealed only; Magic sealed out; singles unchanged).
+
+- **Sealed source = PriceCharting** (`src/sources/pricecharting.ts`) — token as `?t=`,
+  **1 req/sec**, current values only (integer pennies, no history/backfill), Genre
+  "Sealed Product". Singles stay on JustTCG; routing is by `products.kind`.
+  Verify the two price fields first: `PRICECHARTING_TOKEN=xxx npm run verify:pc`
+  (the `loose-price`/`new-price` mapping is unverified until you run it).
+- **Seed identities, never prices:** `npm run seed:sealed` crawls PriceCharting,
+  upserts sealed products/variants + `sealed_config` (format classified from the
+  name; NULL when unmatched), and writes **zero** price rows. `npm run sync:sealed`
+  takes the daily snapshot; `compute.ts` values sealed like singles.
+- **Sourcing friction** (`sourcing_friction`): replacement cost ≠ market. Operator
+  sets `manual_score` / `purchase_limit` / `is_allocated` / `premium_pct` (always
+  wins). `npm run friction` computes an `auto_score` from release recency —
+  honestly, the `listings_ratio` input has no sealed feed, so it's recorded as
+  unavailable in `auto_inputs` rather than fabricated. **Premium applies to the
+  trade side only; market value never changes**, and the UI shows both.
+- **Trade balancer** (`POST /api/trades/balance`, Trades tab): "how many of these
+  for one of those." Returns a whole number + dollar remainder + brackets,
+  friction shown separately from market, a one-sentence liquidity lean, pack-
+  equivalence when formats differ, and a loud staleness banner for new/48h-old
+  lines. Sessions persist with the full computation in `result_json` so a past
+  trade stays explainable.
+- **UPC scan path**: 12–13 digits route to sealed products by `upc`; a miss is
+  normal (partial coverage) — the operator binds the UPC once and stock becomes
+  self-describing.
+
 ## Money
 
-Integer cents everywhere. JustTCG returns USD floats; `Math.round(usd * 100)` at the adapter boundary, and no float passes it.
+Integer cents everywhere. JustTCG returns USD *cents already* (`Math.round`, not ×100 — see Verified state); PriceCharting returns integer pennies; no float passes the adapter boundary.

@@ -59,6 +59,9 @@ export const Product = sequelize.define('products', {
   rarity: DataTypes.TEXT,
   image_url: DataTypes.TEXT,
   upc: DataTypes.TEXT,
+  pricecharting_id: DataTypes.TEXT,
+  ebay_epid: DataTypes.TEXT,
+  tcgplayer_id: DataTypes.TEXT,
   created_at: DataTypes.DATE,
   updated_at: DataTypes.DATE,
 });
@@ -153,6 +156,46 @@ export const Holding = sequelize.define('holdings', {
   created_at: DataTypes.DATE,
 });
 
+// --- Addendum: sealed product, sourcing friction, trades --------------------
+export const SealedConfig = sequelize.define('sealed_config', {
+  product_id: { type: DataTypes.BIGINT, primaryKey: true },
+  format: DataTypes.TEXT,
+  packs_included: DataTypes.INTEGER,
+  cards_per_pack: DataTypes.INTEGER,
+  msrp_cents: cents(),
+  released_on: DataTypes.DATEONLY,
+});
+
+export const SourcingFriction = sequelize.define('sourcing_friction', {
+  product_id: { type: DataTypes.BIGINT, primaryKey: true },
+  manual_score: DataTypes.SMALLINT,
+  purchase_limit: DataTypes.SMALLINT,
+  is_allocated: DataTypes.BOOLEAN,
+  notes: DataTypes.TEXT,
+  auto_score: DataTypes.SMALLINT,
+  auto_inputs: DataTypes.JSONB,
+  auto_computed_at: DataTypes.DATE,
+  premium_pct: DataTypes.DECIMAL(5, 2),
+});
+
+export const TradeSession = sequelize.define('trade_sessions', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  label: DataTypes.TEXT,
+  valued_on: DataTypes.DATEONLY,
+  created_at: DataTypes.DATE,
+  result_json: DataTypes.JSONB,
+});
+
+export const TradeLine = sequelize.define('trade_lines', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  session_id: DataTypes.BIGINT,
+  side: DataTypes.SMALLINT,
+  variant_id: DataTypes.BIGINT,
+  quantity: DataTypes.INTEGER,
+  unit_cents: cents(),
+  friction_pct: DataTypes.DECIMAL(5, 2),
+});
+
 // Associations (for eager reads in the API).
 Set.belongsTo(Category, { foreignKey: 'category_id' });
 Product.belongsTo(Category, { foreignKey: 'category_id' });
@@ -162,7 +205,13 @@ Product.hasMany(Variant, { foreignKey: 'product_id' });
 Holding.belongsTo(Variant, { foreignKey: 'variant_id' });
 
 export type AnyModel = ModelStatic<Model>;
+SealedConfig.belongsTo(Product, { foreignKey: 'product_id' });
+SourcingFriction.belongsTo(Product, { foreignKey: 'product_id' });
+TradeLine.belongsTo(TradeSession, { foreignKey: 'session_id' });
+TradeLine.belongsTo(Variant, { foreignKey: 'variant_id' });
+
 export const models = {
   Category, Set, Product, Variant, Source, SourceVariant,
   PriceObservation, DailyValuation, TradeRule, Holding,
+  SealedConfig, SourcingFriction, TradeSession, TradeLine,
 };

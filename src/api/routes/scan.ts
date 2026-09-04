@@ -183,7 +183,9 @@ export function scanRouter(): Router {
           WHERE p.kind = 'sealed' AND p.upc = $upc`,
         { bind: { upc }, type: QueryTypes.SELECT },
       );
-      res.json({ data: { matches, needsAssociation: matches.length === 0 } });
+      // Echo the upc so the client can bind it via /upc/associate on a miss.
+      // Partial UPC coverage means a miss is NORMAL, not an error.
+      res.json({ data: { upc, matches, needsAssociation: matches.length === 0 } });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }

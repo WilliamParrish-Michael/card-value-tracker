@@ -4,6 +4,7 @@ import { api, type Health } from './lib/api';
 import Search from './pages/Search';
 import Collection from './pages/Collection';
 import Scan from './pages/Scan';
+import Trades from './pages/Trades';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/collection">Collection</NavLink>
           <NavLink to="/scan">Scan</NavLink>
+          <NavLink to="/trades">Trades</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
       </header>
@@ -39,6 +41,7 @@ export default function App() {
           <Route path="/search" element={<Search />} />
           <Route path="/collection" element={<Collection />} />
           <Route path="/scan" element={<Scan health={health} />} />
+          <Route path="/trades" element={<Trades />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

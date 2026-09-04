@@ -148,6 +148,48 @@ export const tradeRulesApi = {
   },
 };
 
+// --- Trade balancer ---
+export interface BracketOption { quantity: number; diffCents: number; aheadSide: 1 | 2 | 'even'; }
+export interface BalancedLine {
+  side: 1 | 2; variantId: string; label: string; format: string | null; quantity: number;
+  unitMarketCents: number | null; frictionPct: number; unitAdjustedCents: number | null;
+  lineMarketCents: number | null; lineAdjustedCents: number | null; packs: number | null;
+  stale: boolean; staleReasons: string[]; unpriced: boolean;
+}
+export interface BalanceResult {
+  sessionId?: string;
+  unknown: { side: 1 | 2; variantId: string; solvedQuantity: number } | null;
+  closest: BracketOption | null;
+  bracket: BracketOption[];
+  lines: BalancedLine[];
+  sideTotals: { 1: { marketCents: number; adjustedCents: number }; 2: { marketCents: number; adjustedCents: number } };
+  packsBySide: { 1: number | null; 2: number | null };
+  liquidityLean: string;
+  warnings: string[];
+  stale: boolean;
+}
+export interface FrictionRow {
+  product_id: string; manual_score: number | null; purchase_limit: number | null;
+  is_allocated: boolean; notes: string | null; auto_score: number | null;
+  auto_inputs: unknown; auto_computed_at: string | null; premium_pct: string;
+}
+
+export const tradesApi = {
+  async balance(input: { sideA: Array<{ variantId: string; quantity?: number }>; sideB: Array<{ variantId: string; quantity?: number }>; applyFriction?: boolean; label?: string }): Promise<BalanceResult> {
+    return (await jsonOrThrow<{ data: BalanceResult }>(await fetch('/api/trades/balance', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }))).data;
+  },
+  async friction(productId: string): Promise<FrictionRow | null> {
+    return (await jsonOrThrow<{ data: FrictionRow | null }>(await fetch(`/api/trades/friction/${productId}`))).data;
+  },
+  async setFriction(productId: string, patch: Partial<{ manual_score: number; purchase_limit: number; is_allocated: boolean; notes: string; premium_pct: number }>): Promise<void> {
+    await jsonOrThrow(await fetch(`/api/trades/friction/${productId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    }));
+  },
+};
+
 export const GAMES: Array<{ slug: string; label: string }> = [
   { slug: '', label: 'All games' },
   { slug: 'pokemon', label: 'Pokémon' },

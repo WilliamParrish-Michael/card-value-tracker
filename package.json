@@ -9,6 +9,10 @@
   },
   "scripts": {
     "verify": "node scripts/verify.js",
+    "verify:pc": "node scripts/verify-pricecharting.js",
+    "seed:sealed": "tsx src/jobs/seed-sealed.ts",
+    "sync:sealed": "tsx src/jobs/sync-sealed-prices.ts",
+    "friction": "tsx src/jobs/compute-friction.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx watch src/api/server.ts",

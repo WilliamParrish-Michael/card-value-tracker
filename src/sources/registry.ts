@@ -10,6 +10,7 @@
  * mirrored into sources.commercial_ok so any public API gate reads one column.
  */
 import { SourceRegistry, JustTCGSource } from './adapter.js';
+import { PriceChartingSource } from './pricecharting.js';
 
 export function buildRegistry(env: NodeJS.ProcessEnv = process.env): SourceRegistry {
   const registry = new SourceRegistry();
@@ -22,6 +23,15 @@ export function buildRegistry(env: NodeJS.ProcessEnv = process.env): SourceRegis
         commercialOk: env.JUSTTCG_COMMERCIAL === 'true',
         requestsPerSecond: env.JUSTTCG_RPS ? Number(env.JUSTTCG_RPS) : 2,
       }),
+    );
+  }
+
+  // Sealed source. Only registered when a token is present — no token, no sealed
+  // data, and the UI shows an empty state naming PRICECHARTING_TOKEN (Rule Zero).
+  const pcToken = env.PRICECHARTING_TOKEN?.trim();
+  if (pcToken) {
+    registry.register(
+      new PriceChartingSource({ token: pcToken, commercialOk: env.PRICECHARTING_COMMERCIAL === 'true' }),
     );
   }
 

@@ -12,6 +12,7 @@ import { collectionRouter } from './routes/collection.js';
 import { valuationRouter } from './routes/valuation.js';
 import { scanRouter } from './routes/scan.js';
 import { tradeRulesRouter } from './routes/trade-rules.js';
+import { tradesRouter } from './routes/trades.js';
 
 export function createApp() {
   const app = express();
@@ -45,6 +46,7 @@ export function createApp() {
   app.use('/api/valuation', valuationRouter());
   app.use('/api/scan', scanRouter());
   app.use('/api/trade-rules', tradeRulesRouter());
+  app.use('/api/trades', tradesRouter());
 
   app.use((_req, res) => res.status(404).json({ error: 'not found' }));
   return app;

@@ -19,7 +19,7 @@
  *    waiting months to accumulate your own.
  */
 
-export type SourceKey = 'justtcg' | 'tcgapi';
+export type SourceKey = 'justtcg' | 'tcgapi' | 'pricecharting';
 export type Grader = 'PSA' | 'BGS' | 'CGC';
 
 export interface VariantKey {

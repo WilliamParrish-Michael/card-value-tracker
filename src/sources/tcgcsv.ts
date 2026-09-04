@@ -65,7 +65,12 @@ export class TcgCsvSource {
 
   private async get<T>(path: string): Promise<T[]> {
     const res = await fetch(`${this.baseUrl}${path}`, {
-      headers: { accept: 'application/json' },
+      // tcgcsv blocks generic User-Agents and asks apps to identify themselves
+      // (https://tcgcsv.com/docs#usage-guidelines).
+      headers: {
+        accept: 'application/json',
+        'User-Agent': 'CardValueTracker/1.0 (+https://github.com/WilliamParrish-Michael/card-value-tracker)',
+      },
     });
     if (!res.ok) throw new Error(`[tcgcsv] ${res.status} on ${path}: ${await res.text().catch(() => '')}`);
     const body = (await res.json()) as { results?: T[] } | T[];

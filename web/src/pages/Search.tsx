@@ -7,7 +7,7 @@
  */
 
 import { Fragment, useEffect, useState } from 'react';
-import { api, fmtCents, fmtPct, GAMES, type SearchHit, type VariantRow, type ProductInfo } from '../lib/api';
+import { api, fmtCents, fmtPct, GAMES, KINDS, type SearchHit, type VariantRow, type ProductInfo } from '../lib/api';
 
 interface VariantsPanel {
   product: ProductInfo;
@@ -30,6 +30,7 @@ function pctClass(p: string | null): string {
 export default function Search() {
   const [q, setQ] = useState('');
   const [game, setGame] = useState('');
+  const [kind, setKind] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [searchedTerm, setSearchedTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -52,7 +53,7 @@ export default function Search() {
     setPanel(null);
     try {
       // An empty term browses the catalog (top priced items) instead of a blank page.
-      const results = await api.search(term, game || undefined);
+      const results = await api.search(term, game || undefined, kind || undefined);
       setHits(results);
       setSearchedTerm(term);
     } catch (err) {
@@ -74,7 +75,7 @@ export default function Search() {
     const id = setTimeout(() => { void runSearch(term); }, 300);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, game]);
+  }, [q, game, kind]);
 
   async function toggleVariants(productId: string) {
     if (openProductId === productId) {
@@ -128,6 +129,11 @@ export default function Search() {
               <option key={g.slug} value={g.slug}>{g.label}</option>
             ))}
           </select>
+          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Type">
+            {KINDS.map((k) => (
+              <option key={k.value} value={k.value}>{k.label}</option>
+            ))}
+          </select>
           <button type="submit" className="button" disabled={loading}>
             {loading ? 'Searching…' : 'Search'}
           </button>
@@ -169,6 +175,9 @@ export default function Search() {
                     <td>
                       <div>{h.name}</div>
                       <div className="muted">{h.set_code} · #{h.collector_number}</div>
+                      <span className={`pill ${h.kind === 'sealed' ? 'sealed' : 'card'}`}>
+                        {h.kind === 'sealed' ? 'Sealed' : 'Card'}
+                      </span>
                       {h.rarity && <span className="pill">{h.rarity}</span>}
                     </td>
                     <td>{h.game}</td>

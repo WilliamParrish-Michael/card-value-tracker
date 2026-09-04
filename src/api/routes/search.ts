@@ -17,6 +17,9 @@ export function searchRouter(): Router {
   r.get('/', async (req, res) => {
     const q = String(req.query.q ?? '').trim();
     const game = req.query.game ? String(req.query.game) : null;
+    // Optional product-kind filter: 'single' (cards) or 'sealed' (unopened).
+    const kindRaw = req.query.kind ? String(req.query.kind) : null;
+    const kind = kindRaw === 'single' || kindRaw === 'sealed' ? kindRaw : null;
     // An empty query browses the catalog (most valuable priced items first)
     // rather than showing a dead-end blank page.
     const browse = q === '';
@@ -52,6 +55,7 @@ export function searchRouter(): Router {
               LIMIT 1
            ) dv ON true
           WHERE ($game::text IS NULL OR c.slug = $game)
+            AND ($kind::text IS NULL OR p.kind = $kind::product_kind)
             AND (
               $browse
               -- Name match is substring (ILIKE) as well as full-text, so partial
@@ -68,9 +72,9 @@ export function searchRouter(): Router {
             (CASE WHEN $browse THEN dv.market_cents END) DESC NULLS LAST,
             p.name
           LIMIT 50`,
-        { bind: { q, game, browse }, type: QueryTypes.SELECT },
+        { bind: { q, game, browse, kind }, type: QueryTypes.SELECT },
       );
-      res.json({ data: rows, query: q, browse });
+      res.json({ data: rows, query: q, browse, kind });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message, data: [] });
     }

@@ -84,10 +84,11 @@ export const api = {
   async health(): Promise<Health> {
     return jsonOrThrow<Health>(await fetch('/api/health'));
   },
-  async search(q: string, game?: string): Promise<SearchHit[]> {
+  async search(q: string, game?: string, kind?: string): Promise<SearchHit[]> {
     const u = new URL('/api/search', location.origin);
     u.searchParams.set('q', q);
     if (game) u.searchParams.set('game', game);
+    if (kind) u.searchParams.set('kind', kind);
     return (await jsonOrThrow<{ data: SearchHit[] }>(await fetch(u))).data;
   },
   async productVariants(productId: string): Promise<{ product: ProductInfo; variants: VariantRow[] }> {
@@ -189,6 +190,12 @@ export const tradesApi = {
     }));
   },
 };
+
+export const KINDS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'All types' },
+  { value: 'single', label: 'Cards' },
+  { value: 'sealed', label: 'Sealed' },
+];
 
 export const GAMES: Array<{ slug: string; label: string }> = [
   { slug: '', label: 'All games' },

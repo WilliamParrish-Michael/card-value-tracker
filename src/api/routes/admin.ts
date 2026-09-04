@@ -22,6 +22,7 @@ import { hasAnySource } from '../../sources/registry.js';
 import { syncCatalog } from '../../jobs/sync-catalog.js';
 import { syncPrices } from '../../jobs/sync-prices.js';
 import { computeValuations } from '../../valuation/compute.js';
+import { syncTcgCsv } from '../../jobs/sync-tcgcsv.js';
 
 export function adminRouter(): Router {
   const router = Router();
@@ -64,6 +65,23 @@ export function adminRouter(): Router {
       return res.json({ ok: true, game, pages, catalog, prices, valuation });
     } catch (err) {
       return res.status(502).json({ error: 'bootstrap failed', detail: (err as Error).message });
+    }
+  });
+
+  // TCGCSV bulk load — keyless, unmetered. Loads a game (default the N most
+  // recently published established sets, or a specific ?groupId) then computes
+  // valuations. Idempotent (upserts + ON CONFLICT DO NOTHING). This is how new
+  // games (e.g. pokemon) get loaded without spending JustTCG's daily quota.
+  router.post('/tcgcsv', async (req, res) => {
+    const game = String(req.query.game ?? 'pokemon');
+    const groupId = req.query.groupId ? Number(req.query.groupId) : undefined;
+    const maxGroups = Math.min(Math.max(Number(req.query.maxGroups ?? 3), 1), 12);
+    try {
+      const sync = await syncTcgCsv({ game, groupId, maxGroups });
+      const valuation = await computeValuations();
+      return res.json({ ok: true, game, source: 'tcgcsv', sync, valuation });
+    } catch (err) {
+      return res.status(502).json({ error: 'tcgcsv load failed', detail: (err as Error).message });
     }
   });
 

@@ -63,6 +63,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pill.warn { border-color: var(--warn); color: var(--warn); }
 .pill.bad { border-color: var(--bad); color: var(--bad); }
 .pill.sealed { border-color: var(--accent); color: var(--accent); margin-right: 6px; }
+.pill.accessory { border-color: var(--warn); color: var(--warn); margin-right: 6px; }
 .pill.card { margin-right: 6px; }
 
 .empty { text-align: center; color: var(--muted); padding: 48px 16px; border: 1px dashed var(--line); border-radius: 12px; }

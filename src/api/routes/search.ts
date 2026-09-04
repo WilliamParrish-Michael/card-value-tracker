@@ -19,7 +19,7 @@ export function searchRouter(): Router {
     const game = req.query.game ? String(req.query.game) : null;
     // Optional product-kind filter: 'single' (cards) or 'sealed' (unopened).
     const kindRaw = req.query.kind ? String(req.query.kind) : null;
-    const kind = kindRaw === 'single' || kindRaw === 'sealed' ? kindRaw : null;
+    const kind = ['single', 'sealed', 'accessory'].includes(kindRaw ?? '') ? kindRaw : null;
     // An empty query browses the catalog (most valuable priced items first)
     // rather than showing a dead-end blank page.
     const browse = q === '';

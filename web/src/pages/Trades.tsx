@@ -198,13 +198,15 @@ interface SidePanelProps {
   onQuantity: (key: string, quantity: number) => void;
   onMarkUnknown: (key: string) => void;
   onRemove: (key: string) => void;
+  showAdd?: boolean;   // the search/add box (hidden on the review step)
+  showSolve?: boolean; // the "solve for this" radios (shown only on review)
 }
 
-function SidePanel({ title, lines, onAdd, onQuantity, onMarkUnknown, onRemove }: SidePanelProps) {
+function SidePanel({ title, lines, onAdd, onQuantity, onMarkUnknown, onRemove, showAdd = true, showSolve = true }: SidePanelProps) {
   return (
     <div className="panel grow">
       <h2>{title}</h2>
-      <AddPanel onAdd={onAdd} />
+      {showAdd && <AddPanel onAdd={onAdd} />}
 
       {lines.length === 0 ? (
         <div className="muted">No items yet.</div>
@@ -215,7 +217,7 @@ function SidePanel({ title, lines, onAdd, onQuantity, onMarkUnknown, onRemove }:
               <tr>
                 <th>Item</th>
                 <th className="num">Qty</th>
-                <th>Solve</th>
+                {showSolve && <th>Solve</th>}
                 <th></th>
               </tr>
             </thead>
@@ -237,18 +239,20 @@ function SidePanel({ title, lines, onAdd, onQuantity, onMarkUnknown, onRemove }:
                       />
                     )}
                   </td>
-                  <td>
-                    <label>
-                      <input
-                        type="radio"
-                        name="trade-unknown"
-                        checked={ln.isUnknown}
-                        onChange={() => onMarkUnknown(ln.key)}
-                        aria-label={`Solve for ${ln.label}`}
-                      />{' '}
-                      solve for this
-                    </label>
-                  </td>
+                  {showSolve && (
+                    <td>
+                      <label>
+                        <input
+                          type="radio"
+                          name="trade-unknown"
+                          checked={ln.isUnknown}
+                          onChange={() => onMarkUnknown(ln.key)}
+                          aria-label={`Solve for ${ln.label}`}
+                        />{' '}
+                        solve for this
+                      </label>
+                    </td>
+                  )}
                   <td>
                     <button type="button" className="button ghost" onClick={() => onRemove(ln.key)}>Remove</button>
                   </td>
@@ -258,6 +262,25 @@ function SidePanel({ title, lines, onAdd, onQuantity, onMarkUnknown, onRemove }:
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Wizard step header ------------------------------------------------------
+
+function Steps({ step }: { step: 1 | 2 | 3 }) {
+  const labels = ['What you’re trading', 'What you’re trading for', 'Review & balance'];
+  return (
+    <div className="row" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+      {labels.map((label, i) => {
+        const n = (i + 1) as 1 | 2 | 3;
+        const state = n === step ? 'sealed' : n < step ? 'card' : '';
+        return (
+          <span key={n} className={`pill ${state}`}>
+            {n}. {label}{n < step ? ' ✓' : ''}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -395,6 +418,7 @@ function ResultView({ result }: { result: BalanceResult }) {
 // --- Page --------------------------------------------------------------------
 
 export default function Trades() {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [side1, setSide1] = useState<TradeLine[]>([]);
   const [side2, setSide2] = useState<TradeLine[]>([]);
   const [applyFriction, setApplyFriction] = useState(true);
@@ -455,63 +479,108 @@ export default function Trades() {
     }
   }
 
+  function goToReview() {
+    // Default the unknown to the last item on their side if nothing is marked yet.
+    if (unknownCount === 0 && side2.length > 0) markUnknown(side2[side2.length - 1].key);
+    setStep(3);
+  }
+
   return (
     <div>
       <h1>Trade balancer</h1>
       <p className="muted">
-        Add items to each side, mark one line "solve for this", and get a whole-number answer with the dollar remainder.
+        One step at a time: pick what you’re trading, then what you’re trading for, then solve for the odd item.
       </p>
 
-      <div className="row">
-        <SidePanel
-          title="You give"
-          lines={side1}
-          onAdd={(pid, v, name) => addLine(1, pid, v, name)}
-          onQuantity={(key, qty) => setQuantity(1, key, qty)}
-          onMarkUnknown={markUnknown}
-          onRemove={(key) => removeLine(1, key)}
-        />
-        <SidePanel
-          title="They give"
-          lines={side2}
-          onAdd={(pid, v, name) => addLine(2, pid, v, name)}
-          onQuantity={(key, qty) => setQuantity(2, key, qty)}
-          onMarkUnknown={markUnknown}
-          onRemove={(key) => removeLine(2, key)}
-        />
-      </div>
+      <Steps step={step} />
 
-      <div className="panel">
-        <div className="row">
-          <label>
-            <input
-              type="checkbox"
-              checked={applyFriction}
-              onChange={(e) => setApplyFriction(e.target.checked)}
-            />{' '}
-            Apply sourcing friction
-          </label>
-          <button type="button" className="button" onClick={handleBalance} disabled={!canBalance || balancing}>
-            {balancing ? 'Balancing…' : 'Balance'}
-          </button>
-          {!canBalance && (
-            <span className="muted">
-              Add at least one item to each side and mark exactly one line to solve for.
-            </span>
-          )}
-        </div>
-      </div>
-
-      {error && <div className="banner error">{error}</div>}
-
-      {!error && result == null && (
-        <div className="empty">
-          <strong>Build a trade</strong>
-          Add items to both sides and mark one line to solve for.
-        </div>
+      {step === 1 && (
+        <>
+          <SidePanel
+            title="What you’re trading (your side)"
+            lines={side1}
+            onAdd={(pid, v, name) => addLine(1, pid, v, name)}
+            onQuantity={(key, qty) => setQuantity(1, key, qty)}
+            onMarkUnknown={markUnknown}
+            onRemove={(key) => removeLine(1, key)}
+            showSolve={false}
+          />
+          <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+            <button type="button" className="button" onClick={() => setStep(2)} disabled={side1.length < 1}>
+              Next: what you’re trading for →
+            </button>
+          </div>
+          {side1.length < 1 && <p className="muted">Add at least one item to continue.</p>}
+        </>
       )}
 
-      {result != null && <ResultView result={result} />}
+      {step === 2 && (
+        <>
+          <SidePanel
+            title="What you’re trading for (their side)"
+            lines={side2}
+            onAdd={(pid, v, name) => addLine(2, pid, v, name)}
+            onQuantity={(key, qty) => setQuantity(2, key, qty)}
+            onMarkUnknown={markUnknown}
+            onRemove={(key) => removeLine(2, key)}
+            showSolve={false}
+          />
+          <div className="row" style={{ marginTop: 12, justifyContent: 'space-between' }}>
+            <button type="button" className="button ghost" onClick={() => setStep(1)}>← Back</button>
+            <button type="button" className="button" onClick={goToReview} disabled={side2.length < 1}>
+              Next: review & balance →
+            </button>
+          </div>
+          {side2.length < 1 && <p className="muted">Add at least one item to continue.</p>}
+        </>
+      )}
+
+      {step === 3 && (
+        <>
+          <SidePanel
+            title="You give"
+            lines={side1}
+            onAdd={(pid, v, name) => addLine(1, pid, v, name)}
+            onQuantity={(key, qty) => setQuantity(1, key, qty)}
+            onMarkUnknown={markUnknown}
+            onRemove={(key) => removeLine(1, key)}
+            showAdd={false}
+          />
+          <div style={{ height: 12 }} />
+          <SidePanel
+            title="They give"
+            lines={side2}
+            onAdd={(pid, v, name) => addLine(2, pid, v, name)}
+            onQuantity={(key, qty) => setQuantity(2, key, qty)}
+            onMarkUnknown={markUnknown}
+            onRemove={(key) => removeLine(2, key)}
+            showAdd={false}
+          />
+
+          <div className="panel">
+            <div className="row">
+              <button type="button" className="button ghost" onClick={() => setStep(2)}>← Back</button>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={applyFriction}
+                  onChange={(e) => setApplyFriction(e.target.checked)}
+                />{' '}
+                Apply sourcing friction
+              </label>
+              <button type="button" className="button" onClick={handleBalance} disabled={!canBalance || balancing}>
+                {balancing ? 'Balancing…' : 'Balance'}
+              </button>
+              {!canBalance && (
+                <span className="muted">Mark exactly one line as “solve for this”.</span>
+              )}
+            </div>
+          </div>
+
+          {error && <div className="banner error">{error}</div>}
+          {result != null && <ResultView result={result} />}
+        </>
+      )}
     </div>
   );
 }

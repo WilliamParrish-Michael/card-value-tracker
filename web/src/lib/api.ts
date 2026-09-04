@@ -195,6 +195,7 @@ export const KINDS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All types' },
   { value: 'single', label: 'Cards' },
   { value: 'sealed', label: 'Sealed' },
+  { value: 'accessory', label: 'Accessories' },
 ];
 
 export const GAMES: Array<{ slug: string; label: string }> = [

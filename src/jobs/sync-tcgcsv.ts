@@ -60,9 +60,19 @@ async function upsertSet(categoryId: number, slug: string, code: string, name: s
   return setId;
 }
 
+// A no-Number product is either sealed product or an accessory. Split them so
+// the Type filter can offer Cards / Sealed / Accessories. Code cards (digital)
+// and physical accessories (sleeves, playmats, binders, pouches, deck boxes…)
+// count as accessories; everything else no-Number is sealed product.
+const ACCESSORY_RE = /\b(sleeve|sleeves|playmat|play mat|deck box|binder|portfolio|pouch|toploader|top loader|card case|dice|counter|marker|storage|album|figure|pin|plush|deck shield|deck holder)\b|^code card|code card -/i;
+function classifyKind(p: TcgCsvProduct): 'single' | 'sealed' | 'accessory' {
+  if (ext(p, 'Number')) return 'single';
+  return ACCESSORY_RE.test(p.name) ? 'accessory' : 'sealed';
+}
+
 async function upsertProduct(categoryId: number, setId: string, p: TcgCsvProduct): Promise<string> {
   const number = ext(p, 'Number');
-  const isSealed = !number;
+  const kind = classifyKind(p);
   const rows = await sequelize.query<{ id: string }>(
     `INSERT INTO products
        (category_id, set_id, kind, collector_number, name, name_slug, rarity, image_url, tcgplayer_id, updated_at)
@@ -74,7 +84,7 @@ async function upsertProduct(categoryId: number, setId: string, p: TcgCsvProduct
      RETURNING id`,
     {
       bind: {
-        cat: categoryId, set: setId, kind: isSealed ? 'sealed' : 'single',
+        cat: categoryId, set: setId, kind,
         num: number || 'N/A', name: p.name, slug: nameSlug(p.name),
         rarity: ext(p, 'Rarity') ?? '', img: p.imageUrl ?? null, tid: String(p.productId),
       },

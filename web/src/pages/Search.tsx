@@ -175,8 +175,8 @@ export default function Search() {
                     <td>
                       <div>{h.name}</div>
                       <div className="muted">{h.set_code} · #{h.collector_number}</div>
-                      <span className={`pill ${h.kind === 'sealed' ? 'sealed' : 'card'}`}>
-                        {h.kind === 'sealed' ? 'Sealed' : 'Card'}
+                      <span className={`pill ${h.kind === 'sealed' ? 'sealed' : h.kind === 'accessory' ? 'accessory' : 'card'}`}>
+                        {h.kind === 'sealed' ? 'Sealed' : h.kind === 'accessory' ? 'Accessory' : 'Card'}
                       </span>
                       {h.rarity && <span className="pill">{h.rarity}</span>}
                     </td>

@@ -46,8 +46,10 @@ export function adminRouter(): Router {
       });
     }
 
+    // Free plan pages are 20 cards each, so default 6 pages ~= 120 cards; the cap
+    // (12 pages) plus price batches stays well inside the 100 req/day free tier.
     const game = String(req.query.game ?? 'one-piece-card-game');
-    const pages = Math.min(Math.max(Number(req.query.pages ?? 3), 1), 5);
+    const pages = Math.min(Math.max(Number(req.query.pages ?? 6), 1), 12);
     const priceLimit = Math.min(Math.max(Number(req.query.priceLimit ?? 800), 1), 2000);
 
     try {

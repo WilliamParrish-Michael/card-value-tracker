@@ -117,7 +117,11 @@ export interface JustTCGOptions {
   priceHistoryDays?: 7 | 30 | 90;
 }
 
-const BATCH_MAX = 200;
+// JustTCG's free plan caps both the GET `limit` and the POST batch at 20
+// ("Limit must be between 1 and 20 for your plan"). Default to 20 so it works out
+// of the box; paid plans can raise it via JUSTTCG_PAGE_LIMIT (up to 200).
+const PAGE_LIMIT = Math.min(Math.max(Number(process.env.JUSTTCG_PAGE_LIMIT ?? 20), 1), 200);
+const BATCH_MAX = PAGE_LIMIT;
 
 export class JustTCGSource implements PriceSource {
   readonly key: SourceKey = 'justtcg';
@@ -179,7 +183,7 @@ export class JustTCGSource implements PriceSource {
   async *pages(game: string, maxPages?: number): AsyncGenerator<SourceCard[]> {
     let offset = 0;
     let pageNo = 0;
-    const limit = 100;
+    const limit = PAGE_LIMIT;
     for (;;) {
       const { cards, hasMore } = await this.getCardsPage(
         `/cards?game=${encodeURIComponent(game)}` +

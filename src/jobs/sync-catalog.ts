@@ -134,7 +134,7 @@ async function stampSetCode(setId: string, categoryId: number, code: string): Pr
   }
 }
 
-export async function syncCatalog(): Promise<{ games: number; sets: number; products: number; variants: number }> {
+export async function syncCatalog(opts: { games?: string[] } = {}): Promise<{ games: number; sets: number; products: number; variants: number }> {
   const registry = buildRegistry();
   const src = registry.get('justtcg') as JustTCGSource | undefined;
   if (!src) {
@@ -142,10 +142,13 @@ export async function syncCatalog(): Promise<{ games: number; sets: number; prod
     throw new Error('No catalog source configured — set JUSTTCG_API_KEY.');
   }
 
-  const categories = await sequelize.query<{ id: number; justtcg_game: string }>(
+  // Optional game filter (by justtcg_game slug) — the free tier is 100 req/day,
+  // so a demo run can target one game, e.g. `sync-catalog one-piece-card-game`.
+  const filter = opts.games && opts.games.length ? opts.games : null;
+  const categories = (await sequelize.query<{ id: number; justtcg_game: string }>(
     `SELECT id, justtcg_game FROM categories WHERE justtcg_game IS NOT NULL ORDER BY id`,
     { type: QueryTypes.SELECT },
-  );
+  )).filter((c) => !filter || filter.includes(c.justtcg_game));
 
   const stats = { games: 0, sets: 0, products: 0, variants: 0 };
   const seenProducts = new Set<string>();
@@ -217,9 +220,10 @@ export async function syncCatalog(): Promise<{ games: number; sets: number; prod
 }
 
 // Allow `tsx src/jobs/sync-catalog.ts` to run it directly.
-const isMain = import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('sync-catalog.ts');
+const isMain = process.argv[1]?.endsWith('sync-catalog.ts') || process.argv[1]?.endsWith('sync-catalog.js');
 if (isMain) {
-  syncCatalog()
+  const games = process.argv.slice(2).filter(Boolean);
+  syncCatalog(games.length ? { games } : {})
     .then((s) => { console.log('[sync-catalog] done', s); return sequelize.close(); })
     .catch((err) => { console.error('[sync-catalog] failed', err); process.exit(1); });
 }

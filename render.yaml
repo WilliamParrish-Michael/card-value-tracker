@@ -1,0 +1,34 @@
+# Render Blueprint — one web service (API + built web app) + a managed Postgres 16.
+# Create it: Render Dashboard -> New -> Blueprint -> pick this repo -> Apply.
+# Then set JUSTTCG_API_KEY (and optionally PSA_ACCESS_TOKEN) in the service's
+# Environment tab — they are marked sync:false so they are NEVER read from the repo.
+services:
+  - type: web
+    name: card-value-tracker
+    runtime: node
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    buildCommand: npm install && npm run build && npm --prefix web install && npm --prefix web run build
+    startCommand: npx sequelize-cli db:migrate && node dist/api/server.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cardtracker-db
+          property: connectionString
+      - key: NODE_VERSION
+        value: 20.18.0
+      # Internal Render Postgres does not use SSL; leave PGSSL unset.
+      # Secrets — set these in the dashboard, not the repo:
+      - key: JUSTTCG_API_KEY
+        sync: false
+      - key: PSA_ACCESS_TOKEN
+        sync: false
+      - key: PRICECHARTING_TOKEN
+        sync: false
+
+databases:
+  - name: cardtracker-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "16"

@@ -5,6 +5,9 @@
  */
 import 'dotenv/config';
 import express from 'express';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { sequelize } from '../models/index.js';
 import { hasAnySource } from '../sources/registry.js';
 import { searchRouter } from './routes/search.js';
@@ -47,6 +50,17 @@ export function createApp() {
   app.use('/api/scan', scanRouter());
   app.use('/api/trade-rules', tradeRulesRouter());
   app.use('/api/trades', tradesRouter());
+
+  // In production, serve the built web app from the same origin so one Render
+  // service hosts both API and UI (keys stay server-side; no CORS in play).
+  const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
+  if (existsSync(webDist)) {
+    app.use(express.static(webDist));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(join(webDist, 'index.html'));
+    });
+  }
 
   app.use((_req, res) => res.status(404).json({ error: 'not found' }));
   return app;

@@ -23,9 +23,14 @@ if (!url) {
   throw new Error('DATABASE_URL is not set. Copy .env.example to .env and fill it in.');
 }
 
+// Managed Postgres (Neon, Render external) needs SSL; a Render internal URL does
+// not (and forcing it fails). Gate on PGSSL so both work: unset = no SSL.
+const useSsl = process.env.PGSSL === 'require' || process.env.PGSSL === 'true';
+
 export const sequelize = new Sequelize(url, {
   dialect: 'postgres',
   logging: false,
+  dialectOptions: useSsl ? { ssl: { require: true, rejectUnauthorized: false } } : {},
   define: { timestamps: false, freezeTableName: true },
 });
 

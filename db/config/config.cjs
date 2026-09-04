@@ -7,6 +7,12 @@
 require('dotenv/config');
 
 const use_env_variable = 'DATABASE_URL';
-const base = { use_env_variable, dialect: 'postgres', logging: false };
+const useSsl = process.env.PGSSL === 'require' || process.env.PGSSL === 'true';
+const base = {
+  use_env_variable,
+  dialect: 'postgres',
+  logging: false,
+  dialectOptions: useSsl ? { ssl: { require: true, rejectUnauthorized: false } } : {},
+};
 
 module.exports = { development: base, test: base, production: base };

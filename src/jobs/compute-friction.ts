@@ -20,8 +20,10 @@ const LAUNCH_WINDOW_DAYS = 60;
 export async function computeFriction(): Promise<{ scored: number; skipped: number }> {
   // Sealed products with a known release date (from sealed_config).
   const rows = await sequelize.query<{ product_id: string; released_on: string | null }>(
-    `SELECT p.id AS product_id, sc.released_on::text AS released_on
+    `SELECT p.id AS product_id,
+            COALESCE(sc.released_on, s.released_on)::text AS released_on
        FROM products p
+       JOIN sets s ON s.id = p.set_id
        LEFT JOIN sealed_config sc ON sc.product_id = p.id
       WHERE p.kind = 'sealed'`,
     { type: QueryTypes.SELECT },

@@ -21,6 +21,36 @@ import type { SourceCard, SourceQuote } from '../sources/adapter.js';
 const nameSlug = (name: string): string =>
   name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+// JustTCG carries sealed product too (condition 'Sealed', collector number 'N/A'),
+// so it's our sealed source — no paid PriceCharting subscription required. Classify
+// the format from the product name for the trade balancer's pack-equivalence; leave
+// it NULL (skip sealed_config) rather than guessing when nothing matches.
+const POKEMON_FORMATS = [
+  'Booster Bundle', 'Booster Box', 'Elite Trainer Box', 'Ultra Premium Collection',
+  'Super Premium Collection', 'Premium Collection', 'Binder Collection', 'Build & Battle Box',
+  'Build & Battle Stadium', 'Checklane Blister', '3-Pack Blister', 'Surprise Box', 'Mini Tin',
+  'Poster Collection', 'Booster Pack', 'Tin', 'Case',
+];
+const ONE_PIECE_FORMATS = [
+  'Booster Box', 'Starter Deck', 'Double Pack Set', 'Premium Booster', 'Ultra Deck',
+  'Gift Collection', 'Tournament Pack', 'Booster Pack', 'Case',
+];
+function classifyFormat(name: string, game: string): string | null {
+  const list = game.includes('one-piece') ? ONE_PIECE_FORMATS : POKEMON_FORMATS;
+  const hay = name.toLowerCase();
+  const hits = list.filter((f) => hay.includes(f.toLowerCase())).sort((a, b) => b.length - a.length);
+  return hits[0] ?? null;
+}
+async function upsertSealedConfig(productId: string, format: string, releasedOn: string | null): Promise<void> {
+  await sequelize.query(
+    `INSERT INTO sealed_config (product_id, format, released_on)
+     VALUES ($pid, $fmt, $rel)
+     ON CONFLICT (product_id) DO UPDATE SET format = EXCLUDED.format,
+       released_on = COALESCE(sealed_config.released_on, EXCLUDED.released_on)`,
+    { bind: { pid: productId, fmt: format, rel: releasedOn } },
+  );
+}
+
 /** 'OP13-118' -> 'OP13'; 'PRB02-005' -> 'PRB02'; '125/197' or '042' -> null. */
 const deriveSetCode = (collectorNumber?: string): string | null => {
   if (!collectorNumber) return null;
@@ -151,6 +181,13 @@ export async function syncCatalog(): Promise<{ games: number; sets: number; prod
 
         const productId = await upsertProduct(cat.id, setId, card);
         if (!seenProducts.has(productId)) { seenProducts.add(productId); stats.products += 1; }
+
+        // Sealed product (collector number 'N/A'): classify its format for the
+        // trade balancer. Skip (leave sealed_config absent) when nothing matches.
+        if (!card.collectorNumber || card.collectorNumber === 'N/A') {
+          const fmt = classifyFormat(card.name, game);
+          if (fmt) await upsertSealedConfig(productId, fmt, setMeta.get(slug)?.releasedOn ?? null);
+        }
 
         for (const q of card.quotes) {
           await upsertVariant(productId, q);

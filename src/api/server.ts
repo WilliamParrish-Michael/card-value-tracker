@@ -16,6 +16,7 @@ import { valuationRouter } from './routes/valuation.js';
 import { scanRouter } from './routes/scan.js';
 import { tradeRulesRouter } from './routes/trade-rules.js';
 import { tradesRouter } from './routes/trades.js';
+import { adminRouter } from './routes/admin.js';
 
 export function createApp() {
   const app = express();
@@ -50,6 +51,7 @@ export function createApp() {
   app.use('/api/scan', scanRouter());
   app.use('/api/trade-rules', tradeRulesRouter());
   app.use('/api/trades', tradesRouter());
+  app.use('/api/admin', adminRouter());
 
   // In production, serve the built web app from the same origin so one Render
   // service hosts both API and UI (keys stay server-side; no CORS in play).

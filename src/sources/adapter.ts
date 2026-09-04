@@ -176,8 +176,9 @@ export class JustTCGSource implements PriceSource {
    * game once and groups by set slug — far cheaper than a per-set fetch while
    * the server `set` filter is unconfirmed.
    */
-  async *pages(game: string): AsyncGenerator<SourceCard[]> {
+  async *pages(game: string, maxPages?: number): AsyncGenerator<SourceCard[]> {
     let offset = 0;
+    let pageNo = 0;
     const limit = 100;
     for (;;) {
       const { cards, hasMore } = await this.getCardsPage(
@@ -186,6 +187,10 @@ export class JustTCGSource implements PriceSource {
           `&priceHistoryDuration=${this.historyDays}d`,
       );
       yield cards.map((c) => this.toSourceCard(c));
+      pageNo += 1;
+      // maxPages caps a demo/bootstrap run so it stays inside the free tier's
+      // daily quota (100 req/day) and finishes in one HTTP request.
+      if (maxPages && pageNo >= maxPages) break;
       if (!hasMore || cards.length === 0) break;
       offset += limit;
     }

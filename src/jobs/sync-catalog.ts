@@ -134,7 +134,7 @@ async function stampSetCode(setId: string, categoryId: number, code: string): Pr
   }
 }
 
-export async function syncCatalog(opts: { games?: string[] } = {}): Promise<{ games: number; sets: number; products: number; variants: number }> {
+export async function syncCatalog(opts: { games?: string[]; maxPages?: number } = {}): Promise<{ games: number; sets: number; products: number; variants: number }> {
   const registry = buildRegistry();
   const src = registry.get('justtcg') as JustTCGSource | undefined;
   if (!src) {
@@ -169,7 +169,7 @@ export async function syncCatalog(opts: { games?: string[] } = {}): Promise<{ ga
     const setIdCache = new Map<string, string>();
     const codeVotes = new Map<string, Map<string, number>>();
 
-    for await (const page of src.pages(game)) {
+    for await (const page of src.pages(game, opts.maxPages)) {
       for (const card of page) {
         const slug = card.setSlug;
         if (!slug) continue;

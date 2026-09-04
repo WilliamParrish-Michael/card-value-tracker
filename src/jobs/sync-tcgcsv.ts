@@ -36,15 +36,28 @@ async function ensureSource(): Promise<void> {
 }
 
 async function upsertSet(categoryId: number, slug: string, code: string, name: string, releasedOn: string | null): Promise<string> {
+  // sets has TWO unique keys: (category_id, slug) AND (category_id, set_code).
+  // Abbreviations collide (many Pokemon promo sets are 'PR'), so seed set_code
+  // with the slug (guaranteed unique per category) and adopt the readable
+  // abbreviation only if it's still free — mirrors the catalog sync's stampSetCode.
   const rows = await sequelize.query<{ id: string }>(
     `INSERT INTO sets (category_id, set_code, slug, name, released_on)
-     VALUES ($cat, $code, $slug, $name, $rel)
+     VALUES ($cat, $slug, $slug, $name, $rel)
      ON CONFLICT (category_id, slug) DO UPDATE
        SET name = EXCLUDED.name, released_on = COALESCE(sets.released_on, EXCLUDED.released_on)
      RETURNING id`,
-    { bind: { cat: categoryId, code, slug, name, rel: releasedOn }, type: QueryTypes.SELECT },
+    { bind: { cat: categoryId, slug, name, rel: releasedOn }, type: QueryTypes.SELECT },
   );
-  return rows[0].id;
+  const setId = rows[0].id;
+  if (code && code !== slug) {
+    await sequelize.query(
+      `UPDATE sets SET set_code = $code
+        WHERE id = $id
+          AND NOT EXISTS (SELECT 1 FROM sets WHERE category_id = $cat AND set_code = $code AND id <> $id)`,
+      { bind: { code, id: setId, cat: categoryId } },
+    );
+  }
+  return setId;
 }
 
 async function upsertProduct(categoryId: number, setId: string, p: TcgCsvProduct): Promise<string> {

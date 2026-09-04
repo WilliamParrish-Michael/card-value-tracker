@@ -24,6 +24,19 @@ import { syncPrices } from '../../jobs/sync-prices.js';
 import { computeValuations } from '../../valuation/compute.js';
 import { syncTcgCsv } from '../../jobs/sync-tcgcsv.js';
 
+// Sequelize hides the real cause behind a generic "Validation error"; dig out
+// the Postgres detail (original.message) and any per-field errors.
+function errDetail(err: unknown): string {
+  const e = err as { message?: string; original?: { message?: string; detail?: string }; errors?: Array<{ message?: string }> };
+  const parts = [
+    e.message,
+    e.original?.message,
+    e.original?.detail,
+    ...(e.errors?.map((x) => x.message) ?? []),
+  ].filter(Boolean);
+  return [...new Set(parts)].join(' | ') || String(err);
+}
+
 export function adminRouter(): Router {
   const router = Router();
 
@@ -64,7 +77,7 @@ export function adminRouter(): Router {
       const valuation = await computeValuations();
       return res.json({ ok: true, game, pages, catalog, prices, valuation });
     } catch (err) {
-      return res.status(502).json({ error: 'bootstrap failed', detail: (err as Error).message });
+      return res.status(502).json({ error: 'bootstrap failed', detail: errDetail(err) });
     }
   });
 
@@ -81,7 +94,7 @@ export function adminRouter(): Router {
       const valuation = await computeValuations();
       return res.json({ ok: true, game, source: 'tcgcsv', sync, valuation });
     } catch (err) {
-      return res.status(502).json({ error: 'tcgcsv load failed', detail: (err as Error).message });
+      return res.status(502).json({ error: 'tcgcsv load failed', detail: errDetail(err) });
     }
   });
 
@@ -103,7 +116,7 @@ export function adminRouter(): Router {
       const valuation = await computeValuations();
       return res.json({ ok: true, refetch, prices, valuation });
     } catch (err) {
-      return res.status(502).json({ error: 'refresh failed', detail: (err as Error).message });
+      return res.status(502).json({ error: 'refresh failed', detail: errDetail(err) });
     }
   });
 

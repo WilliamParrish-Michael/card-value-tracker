@@ -265,7 +265,7 @@ export class JustTCGSource implements PriceSource {
       // `set_name` is the display name ('Romance Dawn'). The old code used
       // `c.set` as the display name — that was the slug.
       setSlug: c.set,
-      setName: c.set_name,
+      setName: c.set_name ?? c.set,   // fall back to the slug if the display name is absent
       name: c.name,
       collectorNumber: c.number,   // 'OP13-118' for singles, 'N/A' for sealed
       rarity: c.rarity,

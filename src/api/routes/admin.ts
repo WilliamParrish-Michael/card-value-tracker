@@ -34,21 +34,26 @@ export function adminRouter(): Router {
       });
     }
 
-    // Refuse once real data exists: bootstrap is first-run only.
+    const game = String(req.query.game ?? 'one-piece-card-game');
+
+    // Refuse once THIS game already has products: bootstrap is first-run PER GAME,
+    // so a new game (e.g. pokemon) can load alongside an existing one without
+    // re-spending quota on a game that's already synced.
     const existing = await sequelize.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM products`,
-      { type: QueryTypes.SELECT },
+      `SELECT count(*)::text AS n
+         FROM products p JOIN categories c ON c.id = p.category_id
+        WHERE c.justtcg_game = $game`,
+      { bind: { game }, type: QueryTypes.SELECT },
     );
     if (Number(existing[0]?.n ?? '0') > 0) {
       return res.status(409).json({
-        error: 'Catalog already populated — bootstrap is first-run only.',
+        error: `Catalog for ${game} already populated — bootstrap is first-run per game.`,
         products: Number(existing[0].n),
       });
     }
 
     // Free plan pages are 20 cards each, so default 6 pages ~= 120 cards; the cap
     // (12 pages) plus price batches stays well inside the 100 req/day free tier.
-    const game = String(req.query.game ?? 'one-piece-card-game');
     const pages = Math.min(Math.max(Number(req.query.pages ?? 6), 1), 12);
     const priceLimit = Math.min(Math.max(Number(req.query.priceLimit ?? 800), 1), 2000);
 

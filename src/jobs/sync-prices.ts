@@ -21,26 +21,28 @@ export async function syncPrices(opts: { limit?: number } = {}): Promise<{ obser
   if (!src) throw new Error('No price source configured — set JUSTTCG_API_KEY.');
 
   const limit = opts.limit ?? 2000;
-  const due = await sequelize.query<{ id: string; justtcg_uuid: string }>(
-    `SELECT id, justtcg_uuid FROM variants
-      WHERE justtcg_uuid IS NOT NULL
+  // Price lookups key on the variant's string id (justtcg_slug), which is the
+  // `variantId` the batch endpoint accepts — its uuid is not a valid lookup key.
+  const due = await sequelize.query<{ id: string; justtcg_slug: string }>(
+    `SELECT id, justtcg_slug FROM variants
+      WHERE justtcg_slug IS NOT NULL
       ORDER BY last_synced_at NULLS FIRST
       LIMIT $limit`,
     { bind: { limit }, type: QueryTypes.SELECT },
   );
   if (due.length === 0) return { observations: 0, variants: 0 };
 
-  const idByUuid = new Map(due.map((r) => [r.justtcg_uuid, r.id]));
+  const idBySlug = new Map(due.map((r) => [r.justtcg_slug, r.id]));
   let observations = 0;
   const touched = new Set<string>();
 
   for (let i = 0; i < due.length; i += BATCH) {
-    const chunk = due.slice(i, i + BATCH).map((r) => r.justtcg_uuid);
-    const cards = await src.fetchByIds(chunk);
+    const chunk = due.slice(i, i + BATCH).map((r) => r.justtcg_slug);
+    const cards = await src.fetchByVariantIds(chunk);
 
     for (const card of cards) {
       for (const q of card.quotes) {
-        const variantId = q.externalUuid ? idByUuid.get(q.externalUuid) : undefined;
+        const variantId = q.externalSlug ? idBySlug.get(q.externalSlug) : undefined;
         if (!variantId) continue;
 
         const [res] = await sequelize.query<{ id: string }>(

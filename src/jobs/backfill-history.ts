@@ -21,10 +21,10 @@ export async function backfillHistory(opts: { limit?: number } = {}): Promise<{ 
   if (!src) throw new Error('No source configured — set JUSTTCG_API_KEY.');
 
   const limit = opts.limit ?? 2000;
-  // Variants with a UUID that have no backfilled observation yet.
-  const due = await sequelize.query<{ id: string; justtcg_uuid: string }>(
-    `SELECT v.id, v.justtcg_uuid FROM variants v
-      WHERE v.justtcg_uuid IS NOT NULL
+  // Variants with a slug (the batch lookup key) that have no backfill yet.
+  const due = await sequelize.query<{ id: string; justtcg_slug: string }>(
+    `SELECT v.id, v.justtcg_slug FROM variants v
+      WHERE v.justtcg_slug IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM price_observations po
            WHERE po.variant_id = v.id AND po.source_key = 'justtcg' AND po.is_backfill = true)
@@ -34,17 +34,17 @@ export async function backfillHistory(opts: { limit?: number } = {}): Promise<{ 
   );
   if (due.length === 0) return { points: 0, variants: 0 };
 
-  const idByUuid = new Map(due.map((r) => [r.justtcg_uuid, r.id]));
+  const idBySlug = new Map(due.map((r) => [r.justtcg_slug, r.id]));
   let points = 0;
   const variants = new Set<string>();
 
   for (let i = 0; i < due.length; i += BATCH) {
-    const chunk = due.slice(i, i + BATCH).map((r) => r.justtcg_uuid);
-    const cards = await src.fetchByIds(chunk);
+    const chunk = due.slice(i, i + BATCH).map((r) => r.justtcg_slug);
+    const cards = await src.fetchByVariantIds(chunk);
 
     for (const card of cards) {
       for (const q of card.quotes) {
-        const variantId = q.externalUuid ? idByUuid.get(q.externalUuid) : undefined;
+        const variantId = q.externalSlug ? idBySlug.get(q.externalSlug) : undefined;
         if (!variantId || !q.history?.length) continue;
 
         for (const pt of q.history) {

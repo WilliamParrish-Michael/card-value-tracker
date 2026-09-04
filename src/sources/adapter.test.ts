@@ -30,7 +30,7 @@ describe('JustTCGSource (against recorded fixture)', () => {
 
   it('maps prices as integer cents — never multiplies by 100', async () => {
     const src = new JustTCGSource({ apiKey: 'test', requestsPerSecond: 1000 });
-    const cards = await src.fetchByIds(['any-uuid']);
+    const cards = await src.fetchByVariantIds(['any-slug']);
     const quotes = cards.flatMap((c) => c.quotes);
     expect(quotes.length).toBeGreaterThan(0);
 
@@ -45,14 +45,14 @@ describe('JustTCGSource (against recorded fixture)', () => {
 
   it('uses set_name for the display name and set slug separately', async () => {
     const src = new JustTCGSource({ apiKey: 'test', requestsPerSecond: 1000 });
-    const [card] = await src.fetchByIds(['any-uuid']);
+    const [card] = await src.fetchByVariantIds(['any-slug']);
     expect(card.setName).toBe('Romance Dawn');
     expect(card.setSlug).toBe('romance-dawn-one-piece-card-game');
   });
 
   it('defaults language to English and never emits null', async () => {
     const src = new JustTCGSource({ apiKey: 'test', requestsPerSecond: 1000 });
-    const cards = await src.fetchByIds(['any-uuid']);
+    const cards = await src.fetchByVariantIds(['any-slug']);
     for (const q of cards.flatMap((c) => c.quotes)) {
       expect(q.variant.language).toBeTruthy();
     }
@@ -60,7 +60,7 @@ describe('JustTCGSource (against recorded fixture)', () => {
 
   it('backfills history points as { observedOn, priceCents } with cents rounded', async () => {
     const src = new JustTCGSource({ apiKey: 'test', requestsPerSecond: 1000 });
-    const withHistory = (await src.fetchByIds(['any-uuid']))
+    const withHistory = (await src.fetchByVariantIds(['any-slug']))
       .flatMap((c) => c.quotes)
       .find((q) => q.history && q.history.length);
 

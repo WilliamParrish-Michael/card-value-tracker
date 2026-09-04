@@ -123,7 +123,7 @@ export class PriceChartingSource implements PriceSource {
   async fetchSet(): Promise<SourceCard[]> { return []; }
 
   /** Fetch current sealed values by PriceCharting id (used by the sealed price snapshot). */
-  async fetchByIds(ids: string[]): Promise<SourceCard[]> {
+  async fetchByVariantIds(ids: string[]): Promise<SourceCard[]> {
     const out: SourceCard[] = [];
     for (const id of ids) {
       try {

@@ -79,7 +79,8 @@ export interface PriceSource {
 
   listSets(game: string): Promise<Array<{ slug: string; name: string; releasedOn?: string | null; code?: string }>>;
   fetchSet(game: string, setSlug: string): Promise<SourceCard[]>;
-  fetchByIds(uuids: string[]): Promise<SourceCard[]>;
+  /** Batch price lookup by each variant's string id (our justtcg_slug). */
+  fetchByVariantIds(variantIds: string[]): Promise<SourceCard[]>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -253,22 +254,30 @@ export class JustTCGSource implements PriceSource {
   }
 
   /**
-   * Batch refresh. This is the endpoint your nightly job should live
-   * on — 200 cards per request instead of 200 requests.
+   * Batch refresh. This is the endpoint the nightly job lives on — a page of
+   * variants per request instead of one request per variant.
+   *
+   * Verified shape: POST /cards takes a BARE TOP-LEVEL ARRAY of lookup objects
+   * (`[{"variantId": "<variant.id>"}, ...]`) — NOT `{cards:[...]}` (that 400s
+   * with "Batch request body must be an array of lookup objects"). The lookup
+   * key is the variant's string `id` (our justtcg_slug), not its uuid
+   * (`{uuid}`/`{cardId}` lookups return zero rows). priceHistoryDuration goes on
+   * the query string. Each match returns the card carrying just that variant, so
+   * the caller re-matches on externalSlug (v.id).
    */
-  async fetchByIds(uuids: string[]): Promise<SourceCard[]> {
+  async fetchByVariantIds(variantIds: string[]): Promise<SourceCard[]> {
     const out: SourceCard[] = [];
 
-    for (let i = 0; i < uuids.length; i += BATCH_MAX) {
-      const chunk = uuids.slice(i, i + BATCH_MAX);
+    for (let i = 0; i < variantIds.length; i += BATCH_MAX) {
+      const chunk = variantIds.slice(i, i + BATCH_MAX);
       try {
-        const cards = await this.request<JtCard[]>('/cards', {
-          method: 'POST',
-          body: JSON.stringify({
-            cards: chunk.map((uuid) => ({ uuid })),
-            priceHistoryDuration: `${this.historyDays}d`,
-          }),
-        });
+        const cards = await this.request<JtCard[]>(
+          `/cards?priceHistoryDuration=${this.historyDays}d`,
+          {
+            method: 'POST',
+            body: JSON.stringify(chunk.map((variantId) => ({ variantId }))),
+          },
+        );
         out.push(...cards.map((c) => this.toSourceCard(c)));
       } catch (err) {
         if (err instanceof SourceError && err.status === 429) throw err;
